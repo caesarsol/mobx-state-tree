@@ -1128,16 +1128,43 @@ function createNode(type, parent, subpath, environment, initialValue, createNewI
     finally {
         if (sawException) {
             // short-cut to die the instance, to avoid the snapshot computed starting to throw...
-            
+
             node._isAlive = false;
         }
     }
 }
 
+function indent(str, ind = '  ') {
+  return ind + str.split('\n').join('\n' + ind)
+}
+
+function JSStringify(json, short = false) {
+  if (Array.isArray(json)) return '[' + json.map(v => JSStringify(v)).join(', ') + ']'
+  if (typeof json === 'undefined') return 'undefined'
+  if (!json || typeof json !== 'object') return JSON.stringify(json)
+  if (Object.keys(json).length === 0) return '{}'
+  const JSStr = (j, mapV, s = false) =>
+    '{' +
+    Object.entries(j).sort(([a], [b]) => a > b ? 1 : -1).map(([k, v]) =>
+      `${(s?'\n  ':'')}${k}: ${mapV(v)}`
+    ).join(', ') +
+    (s?'\n':'') +
+    '}'
+  if (short) return JSStr(json, (v =>
+    Array.isArray(v) ? 'array['+v.length+']' :
+    v === null ? 'null' :
+    typeof v === 'string' ? (v.length > 13 ? '"' + v.substr(0, 10) + '"' + '...' : '"'+v+'"') :
+    typeof v === 'number' ? v :
+    typeof v === 'boolean' ? v :
+    typeof v
+  ))
+  return JSStr(json, (v => JSStringify(v, true)), true)
+}
+
 function prettyPrintValue(value) {
     return typeof value === "function"
         ? "<function" + (value.name ? " " + value.name : "") + ">"
-        : isStateTreeNode(value) ? "<" + value + ">" : "`" + JSON.stringify(value) + "`";
+        : isStateTreeNode(value) ? "<" + value + ">" : JSStringify(value);
 }
 function toErrorString(error) {
     var value = error.value;
@@ -1149,20 +1176,22 @@ function toErrorString(error) {
     var pathPrefix = fullPath.length > 0 ? "at path \"/" + fullPath + "\" " : "";
     var currentTypename = isStateTreeNode(value)
         ? "value of type " + getStateTreeNode(value).type.name + ":"
-        : isPrimitive(value) ? "value" : "snapshot";
+        : isPrimitive(value) ? "value:" : "snapshot:";
     var isSnapshotCompatible = type && isStateTreeNode(value) && type.is(getStateTreeNode(value).snapshot);
-    return ("" + pathPrefix + currentTypename + " " + prettyPrintValue(value) + " is not assignable " + (type
-        ? "to type: `" + type.name + "`"
-        : "") +
-        (error.message ? " (" + error.message + ")" : "") +
+    return ("" + pathPrefix + currentTypename + "\n" + indent(
+      indent(prettyPrintValue(value)) +
+      "\nis not assignable " +
+      (type
+        ? "to type: \n" + indent(type.describe()) + "\n" + indent(type.name) + "\n"
+        : "\n") +
+        (error.message ? "" + error.message + "\n" : "") +
         (type
             ? isPrimitiveType(type)
                 ? "."
-                : ", expected an instance of `" + type.name + "` or a snapshot like `" + type.describe() + "` instead." +
-                    (isSnapshotCompatible
-                        ? " (Note that a snapshot of the provided value is compatible with the targeted type)"
-                        : "")
-            : "."));
+                : (isSnapshotCompatible
+                    ? "(Note that a snapshot of the provided value is compatible with the targeted type)\n"
+                    : "")
+            : ".")));
 }
 
 function getContextForPath(context, path, type) {
@@ -1181,8 +1210,8 @@ function flattenTypeErrors(errors) {
 function typecheck(type, value) {
     var errors = type.validate(value, [{ path: "", type: type }]);
     if (errors.length > 0) {
-        fail("Error while converting " + prettyPrintValue(value) + " to `" + type.name + "`:\n" +
-            errors.map(toErrorString).join("\n"));
+        fail("Error while converting\n" + prettyPrintValue(value) + "\nto\n  " + type.name + "\n\n" +
+            "• " + errors.map(toErrorString).join("\n• "));
     }
 }
 
@@ -1206,7 +1235,7 @@ var ComplexType = (function () {
         if (isStateTreeNode(value)) {
             return getType(value) === this || this.isAssignableFrom(getType(value))
                 ? typeCheckSuccess()
-                : typeCheckFailure(context, value);
+                : typeCheckFailure(context, value, "Value type is not compatible");
             // it is tempting to compare snapshots, but in that case we should always clone on assignments...
         }
         return this.isValidSnapshot(value, context);
@@ -1463,7 +1492,7 @@ var MapType = (function (_super) {
     MapType.prototype.isValidSnapshot = function (value, context) {
         var _this = this;
         if (!isPlainObject(value)) {
-            return typeCheckFailure(context, value);
+            return typeCheckFailure(context, value, "Value is not a plain object, hence cannot be casted to a map");
         }
         return flattenTypeErrors(Object.keys(value).map(function (path) {
             return _this.subType.validate(value[path], getContextForPath(context, path, _this.subType));
@@ -1473,7 +1502,7 @@ var MapType = (function (_super) {
         return {};
     };
     MapType.prototype.removeChild = function (node, subpath) {
-        
+
         node.storedValue.delete(subpath);
     };
     __decorate([
@@ -1510,7 +1539,7 @@ var ArrayType = (function (_super) {
         return _this;
     }
     ArrayType.prototype.describe = function () {
-        return this.subType.describe() + '[]';
+        return 'Array[' + this.subType.describe() + ']';
     };
     ArrayType.prototype.instantiate = function (parent, subpath, environment, snapshot) {
         return createNode(this, parent, subpath, environment, snapshot, this.createNewInstance, this.finalizeNewInstance);
@@ -1603,11 +1632,13 @@ var ArrayType = (function (_super) {
     ArrayType.prototype.isValidSnapshot = function (value, context) {
         var _this = this;
         if (!Array.isArray(value)) {
-            return typeCheckFailure(context, value);
+            return typeCheckFailure(context, value, "Value is not an array");
         }
-        return flattenTypeErrors(value.map(function (item, index) {
-            return _this.subType.validate(item, getContextForPath(context, '' + index, _this.subType));
+        var x = flattenTypeErrors(value.map(function (item, index) {
+            var x = _this.subType.validate(item, getContextForPath(context, '' + index, _this.subType));
+            return x
         }));
+        return x
     };
     ArrayType.prototype.getDefaultSnapshot = function () {
         return [];
@@ -1708,7 +1739,7 @@ var CoreType = (function (_super) {
         if (isPrimitive(value) && this.checker(value)) {
             return typeCheckSuccess();
         }
-        return typeCheckFailure(context, value);
+        return typeCheckFailure(context, value, "Value is not of the specified primitive type");
     };
     return CoreType;
 }(Type));
@@ -1791,7 +1822,7 @@ var OptionalValue = (function (_super) {
         configurable: true
     });
     OptionalValue.prototype.describe = function () {
-        return this.type.describe() + "?";
+        return '?' + this.type.describe();
     };
     OptionalValue.prototype.instantiate = function (parent, subpath, environment, value) {
         if (typeof value === "undefined") {
@@ -1814,10 +1845,8 @@ var OptionalValue = (function (_super) {
     };
     OptionalValue.prototype.isValidSnapshot = function (value, context) {
         // defaulted values can be skipped
-        if (value === undefined || this.type.is(value)) {
-            return typeCheckSuccess();
-        }
-        return typeCheckFailure(context, value);
+        if (value === undefined) return typeCheckSuccess();
+        return this.type.validate(value, context)
     };
     return OptionalValue;
 }(Type));
@@ -1886,10 +1915,10 @@ var Literal = (function (_super) {
         return JSON.stringify(this.value);
     };
     Literal.prototype.isValidSnapshot = function (value, context) {
-        if (isPrimitive(value) && value === this.value) {
+        if (value === this.value) {
             return typeCheckSuccess();
         }
-        return typeCheckFailure(context, value);
+        return typeCheckFailure(context, value, "Value is not a literal equal to \"" + this.value + "\"");
     };
     return Literal;
 }(Type));
@@ -1939,7 +1968,7 @@ var ValueProperty = (function (_super) {
     };
     ValueProperty.prototype.serialize = function (instance, snapshot) {
         // TODO: FIXME, make sure the observable ref is used!
-        
+
         extras.getAtom(instance, this.name).reportObserved();
         snapshot[this.name] = this.getValueNode(instance).snapshot;
     };
@@ -2020,7 +2049,7 @@ var VolatileProperty = (function (_super) {
     };
     VolatileProperty.prototype.validate = function (snapshot, context) {
         if (this.name in snapshot) {
-            return typeCheckFailure(getContextForPath(context, this.name), snapshot[this.name], "volatile state should not be provided in the snapshot");
+            return typeCheckFailure(getContextForPath(context, this.name), snapshot[this.name], "Volatile state should not be provided in the snapshot");
         }
         return typeCheckSuccess();
     };
@@ -2193,9 +2222,13 @@ var ObjectType = (function (_super) {
         var _this = this;
         var snapshot = this.preProcessSnapshot(value);
         if (!isPlainObject(snapshot)) {
-            return typeCheckFailure(context, snapshot);
+            return typeCheckFailure(context, snapshot, "Value is not a plain Object");
         }
-        return flattenTypeErrors(Object.keys(this.props).map(function (path) { return _this.props[path].validate(snapshot, context); }));
+        var y = flattenTypeErrors(Object.keys(this.props).map(function (path) {
+          var x = _this.props[path].validate(snapshot, context);
+          return x
+        }));
+        return y
     };
     ObjectType.prototype.forAllProps = function (fn) {
         var _this = this;
@@ -2206,15 +2239,16 @@ var ObjectType = (function (_super) {
         var _this = this;
         // TODO: make proptypes responsible
         // optimization: cache
-        return ("{ " +
-            Object.keys(this.props)
-                .map(function (key) {
+        return ("{\n" +
+            Object.keys(this.props).sort((a, b) => a > b ? 1 : -1)
+            .map(function (key) {
                 var prop = _this.props[key];
-                return prop instanceof ValueProperty ? key + ": " + prop.type.describe() : "";
-            })
-                .filter(Boolean)
-                .join("; ") +
-            " }");
+                return prop instanceof ValueProperty
+                ? '  ' + key + ": " +
+                  prop.type.describe().split('\n').join('\n' + '  ')
+                : "";
+            }).filter(Boolean).join(",\n") +
+            "\n}");
     };
     ObjectType.prototype.getDefaultSnapshot = function () {
         return {};
@@ -2326,7 +2360,7 @@ var ReferenceType = (function (_super) {
     ReferenceType.prototype.isValidSnapshot = function (value, context) {
         return typeof value === "string" || typeof value === "number"
             ? typeCheckSuccess()
-            : typeCheckFailure(context, value, "Value '" + prettyPrintValue(value) + "' is not a valid reference. Expected a string or number.");
+            : typeCheckFailure(context, value, "Value is not a valid reference. Expected a string or number.");
     };
     return ReferenceType;
 }(Type));
@@ -2387,10 +2421,11 @@ var Union = (function (_super) {
         var errors = this.types.map(function (type) { return type.validate(value, context); });
         var applicableTypes = errors.filter(function (errorArray) { return errorArray.length === 0; });
         if (applicableTypes.length > 1) {
-            return typeCheckFailure(context, value, "Multiple types are applicable and no dispatch method is defined for the union");
+            return typeCheckFailure(context, value, "Multiple types are applicable for the union, use a dispatcher function to disambiguate");
         }
         else if (applicableTypes.length < 1) {
-            return typeCheckFailure(context, value, "No type is applicable and no dispatch method is defined for the union").concat(flattenTypeErrors(errors));
+            const errorMessages = flattenTypeErrors(errors).map(e => e.message).join(', ')
+            return typeCheckFailure(context, value, "No type is applicable fot the union: " + errorMessages)
         }
         return typeCheckSuccess();
     };
@@ -2439,13 +2474,15 @@ var Refinement = (function (_super) {
         return this.type.isAssignableFrom(type);
     };
     Refinement.prototype.isValidSnapshot = function (value, context) {
-        if (this.type.is(value)) {
-            var snapshot = isStateTreeNode(value) ? getStateTreeNode(value).snapshot : value;
-            if (this.predicate(snapshot)) {
-                return typeCheckSuccess();
-            }
+        const errorsType = this.type.validate(value, context)
+        if (errorsType.length > 0) return errorsType
+
+        var snapshot = isStateTreeNode(value) ? getStateTreeNode(value).snapshot : value;
+        if (this.predicate(snapshot)) {
+            return typeCheckSuccess();
+        } else {
+            return typeCheckFailure(context, value, "Refinement predicate is not respected")
         }
-        return typeCheckFailure(context, value);
     };
     return Refinement;
 }(Type));
@@ -2461,7 +2498,7 @@ var Frozen = (function (_super) {
         return _this;
     }
     Frozen.prototype.describe = function () {
-        return "<any immutable value>";
+        return "frozen";
     };
     Frozen.prototype.instantiate = function (parent, subpath, environment, value) {
         // deep freeze the object/array
@@ -2469,7 +2506,7 @@ var Frozen = (function (_super) {
     };
     Frozen.prototype.isValidSnapshot = function (value, context) {
         if (!isSerializable(value)) {
-            return typeCheckFailure(context, value);
+            return typeCheckFailure(context, value, "Value is not serializable, hence cannot be frozen");
         }
         return typeCheckSuccess();
     };
