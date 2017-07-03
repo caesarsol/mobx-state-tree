@@ -1,6 +1,12 @@
 import { IType, Type } from "../type"
 import { isType, TypeFlags } from "../type-flags"
-import { IContext, IValidationResult, typeCheckSuccess, typeCheckFailure, flattenTypeErrors } from "../type-checker"
+import {
+    IContext,
+    IValidationResult,
+    typeCheckSuccess,
+    typeCheckFailure,
+    flattenTypeErrors
+} from "../type-checker"
 import { fail } from "../../utils"
 import { Node } from "../../core"
 
@@ -71,14 +77,12 @@ export class Union extends Type<any, any> {
             return typeCheckFailure(
                 context,
                 value,
-                "Multiple types are applicable and no dispatch method is defined for the union"
+                "Multiple types are applicable for the union (hint: provide a dispatch function)"
             )
-        } else if (applicableTypes.length < 1) {
-            return typeCheckFailure(
-                context,
-                value,
-                "No type is applicable and no dispatch method is defined for the union"
-            ).concat(flattenTypeErrors(errors))
+        } else if (applicableTypes.length === 0) {
+            return typeCheckFailure(context, value, "No type is applicable for the union").concat(
+                flattenTypeErrors(errors)
+            )
         }
 
         return typeCheckSuccess()
@@ -218,7 +222,28 @@ export function union<SA, SB, SC, SD, SE, SF, SG, SH, SI, TA, TB, TC, TD, TE, TF
     I: IType<SI, TI>
 ): IType<SA | SB | SC | SD | SE | SF | SG | SH | SI, TA | TB | TC | TD | TE | TF | TG | TH | TI>
 
-export function union<SA, SB, SC, SD, SE, SF, SG, SH, SI, SJ, TA, TB, TC, TD, TE, TF, TG, TH, TI, TJ>(
+export function union<
+    SA,
+    SB,
+    SC,
+    SD,
+    SE,
+    SF,
+    SG,
+    SH,
+    SI,
+    SJ,
+    TA,
+    TB,
+    TC,
+    TD,
+    TE,
+    TF,
+    TG,
+    TH,
+    TI,
+    TJ
+>(
     dispatch: ITypeDispatcher,
     A: IType<SA, TA>,
     B: IType<SB, TB>,
@@ -230,8 +255,32 @@ export function union<SA, SB, SC, SD, SE, SF, SG, SH, SI, SJ, TA, TB, TC, TD, TE
     H: IType<SH, TH>,
     I: IType<SI, TI>,
     J: IType<SJ, TJ>
-): IType<SA | SB | SC | SD | SE | SF | SG | SH | SI | SJ, TA | TB | TC | TD | TE | TF | TG | TH | TI | TJ>
-export function union<SA, SB, SC, SD, SE, SF, SG, SH, SI, SJ, TA, TB, TC, TD, TE, TF, TG, TH, TI, TJ>(
+): IType<
+    SA | SB | SC | SD | SE | SF | SG | SH | SI | SJ,
+    TA | TB | TC | TD | TE | TF | TG | TH | TI | TJ
+>
+export function union<
+    SA,
+    SB,
+    SC,
+    SD,
+    SE,
+    SF,
+    SG,
+    SH,
+    SI,
+    SJ,
+    TA,
+    TB,
+    TC,
+    TD,
+    TE,
+    TF,
+    TG,
+    TH,
+    TI,
+    TJ
+>(
     A: IType<SA, TA>,
     B: IType<SB, TB>,
     C: IType<SC, TC>,
@@ -242,7 +291,10 @@ export function union<SA, SB, SC, SD, SE, SF, SG, SH, SI, SJ, TA, TB, TC, TD, TE
     H: IType<SH, TH>,
     I: IType<SI, TI>,
     J: IType<SJ, TJ>
-): IType<SA | SB | SC | SD | SE | SF | SG | SH | SI | SJ, TA | TB | TC | TD | TE | TF | TG | TH | TI | TJ>
+): IType<
+    SA | SB | SC | SD | SE | SF | SG | SH | SI | SJ,
+    TA | TB | TC | TD | TE | TF | TG | TH | TI | TJ
+>
 
 export function union(...types: IType<any, any>[]): IType<any, any>
 export function union(
