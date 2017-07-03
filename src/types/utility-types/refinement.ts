@@ -34,18 +34,28 @@ export class Refinement<S, T> extends Type<S, T> {
     }
 
     isValidSnapshot(value: any, context: IContext): IValidationResult {
-        if (this.type.is(value)) {
-            const snapshot = isStateTreeNode(value) ? getStateTreeNode(value).snapshot : value
+        const subtypeErrors = this.type.validate(value, context)
+        if (subtypeErrors.length > 0) return subtypeErrors
 
-            if (this.predicate(snapshot)) {
-                return typeCheckSuccess()
-            }
+        const snapshot = isStateTreeNode(value) ? getStateTreeNode(value).snapshot : value
+
+        if (!this.predicate(snapshot)) {
+            return typeCheckFailure(
+                context,
+                value,
+                "Value does not respect the refinement predicate"
+            )
         }
-        return typeCheckFailure(context, value)
+
+        return typeCheckSuccess()
     }
 }
 
-export function refinement<T>(name: string, type: IType<T, T>, predicate: (snapshot: T) => boolean): IType<T, T>
+export function refinement<T>(
+    name: string,
+    type: IType<T, T>,
+    predicate: (snapshot: T) => boolean
+): IType<T, T>
 export function refinement<S, T extends S, U extends S>(
     name: string,
     type: IType<S, T>,
