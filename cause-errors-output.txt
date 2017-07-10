@@ -1,0 +1,37 @@
+
+t.array(t.string).create(1)
+===========================
+Error: [mobx-state-tree] Error while converting `1` to `string[]`:
+value `1` is not assignable to type: `string[]`, expected an instance of `string[]` or a snapshot like `string[]` instead.
+
+t.map(t.string).create(1)
+=========================
+Error: [mobx-state-tree] Error while converting `1` to `map<string, string>`:
+value `1` is not assignable to type: `map<string, string>`, expected an instance of `map<string, string>` or a snapshot like `Map<string, string>` instead.
+
+t.map(t.string).create({ a: 1 })
+================================
+Error: [mobx-state-tree] Error while converting `{"a":1}` to `map<string, string>`:
+at path "/a" value `1` is not assignable to type: `string`.
+
+t.maybe(t.string).create(1)
+===========================
+Error: [mobx-state-tree] Error while converting `1` to `string | null`:
+value `1` is not assignable to type: `string | null` (No type is applicable and no dispatch method is defined for the union).
+value `1` is not assignable to type: `string | null`.
+value `1` is not assignable to type: `string | null`.
+
+t.union( t.number, t.string, t.boolean, t.Date, t.model('Model', { b: t.string }), t.frozen, t.literal(null), t.literal(undefined), t.literal(42), t.literal('YOYO') ).create({})
+=================================================================================================================================================================================
+Error: [mobx-state-tree] Error while converting <function> to `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`:
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number` (No type is applicable and no dispatch method is defined for the union).
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
+snapshot <function> is not assignable to type: `string | boolean | Date | Model | frozen | null | undefined | 42 | YOYO | number`.
